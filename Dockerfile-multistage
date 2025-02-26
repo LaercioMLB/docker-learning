@@ -1,0 +1,35 @@
+# ==========================
+# Etapa 1: Build (Instalação de dependências e compilação)
+# ==========================
+FROM node:20-alpine AS builder
+
+# Definindo diretório de trabalho
+WORKDIR /app
+
+# Copiando apenas os arquivos de dependências para otimizar cache
+COPY package.json package-lock.json ./
+
+# Instalando dependências de produção
+RUN npm ci --only=production
+
+# Copiando o restante do código para o diretório de build
+COPY . .
+
+# ==========================
+# Etapa 2: Runtime (Imagem final enxuta)
+# ==========================
+FROM node:20-alpine
+
+# Definindo diretório de trabalho na imagem final
+WORKDIR /app
+
+# Copiando apenas os arquivos necessários da etapa de build
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./
+
+# Expondo a porta em que a aplicação irá rodar
+EXPOSE 3000
+
+# Comando para iniciar a aplicação
+CMD ["node", "dist/server.js"]

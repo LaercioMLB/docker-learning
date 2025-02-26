@@ -1,0 +1,32 @@
+version: "3"
+#SERVICES SERÃO TODOS MEUS CONTAINERS NESTE CASO JA ORGANIZADO POR FRONT, API E DB
+services:
+    
+    api:
+        #A IMAGEM QUE MEU CONTAINER IRÁ RODAR
+        image: desenvolvedorio/api-aspnet-curso-angular:latest
+        # (OPCIONAL) O NOME DO MEU CONTAINER
+        container_name: api-aspnet-curso-angular        
+        #AS PORTSA QUE SERÃO EXPOSTAS PARA ACESSAR MEU CONTAINER EXTERNAMENTE
+        ports:
+            - "5001:80"
+        #VARIAVEL DE AMBIENTE DO SISTEMA
+        environment: 
+            - ASPNETCORE_ENVIRONMENT=Production
+        #(OPCIONAL) ESSE CONTAINER DEPENDE DE OUTRO CONTAINER ESTA NO AR PARA ELE SUBIR.
+        depends_on:
+            - db
+    db:
+        image: desenvolvedorio/sql-api-curso-angular:latest
+        container_name: sql-api-curso-angular
+        ports:  
+            - "1433:1433"
+        environment:
+            SA_PASSWORD: "MeuDB@123"
+            ACCEPT_EULA: "Y"
+    client:
+        image: desenvolvedorio/app-spa-curso-angular:latest
+        container_name: app-spa-curso-angular
+        ports:
+            - "8080:80"
+ 

@@ -1,0 +1,22 @@
+#EXEMPLO DE UM DOCKERFILE PARA UMA APLICAÇÃO NODEJS 
+
+# Usando uma imagem base do Node.js baseada no Alpine para manter o container leve
+FROM node:20-alpine
+
+# Definindo o diretório de trabalho dentro do container
+WORKDIR /app
+
+# Copiando o package.json e package-lock.json para instalar as dependências primeiro (otimiza cache)
+COPY package*.json ./
+
+# Instalando as dependências
+RUN npm install --only=production
+
+# Copiando o restante do código para dentro do container
+COPY . .
+
+# Expondo a porta em que a aplicação vai rodar
+EXPOSE 3000
+
+# Comando padrão para iniciar a aplicação
+CMD ["node", "server.js"]
