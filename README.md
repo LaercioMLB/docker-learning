@@ -347,6 +347,16 @@ Abra o navegador e acesse:
 http://localhost:8080
 ```
 
+## Explicação Visual Do Docker
+
+Após executar o passo a passo, a imagem abaixo ajuda a visualizar o fluxo básico do Docker neste projeto:
+
+```text
+Dockerfile -> Imagem Docker -> Container -> Site acessível no navegador
+```
+
+![Explicação visual do Docker](explicacao-docker.png)
+
 ## Comandos Úteis Do Docker
 
 ### Listar Containers Em Execução
@@ -473,4 +483,3 @@ Para parar e remover:
 docker stop meu-site
 docker rm meu-site
 ```
-
