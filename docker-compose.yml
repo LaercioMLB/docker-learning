@@ -1,0 +1,36 @@
+services:
+  welcome-blue:
+    build:
+      context: .
+      dockerfile: Dockerfile.blue
+    image: react-welcome-blue
+    container_name: react-welcome-blue
+    networks:
+      - welcome-network
+
+  welcome-green:
+    build:
+      context: .
+      dockerfile: Dockerfile.green
+    image: react-welcome-green
+    container_name: react-welcome-green
+    networks:
+      - welcome-network
+
+  haproxy:
+    image: haproxy:3.0-alpine
+    container_name: welcome-haproxy
+    depends_on:
+      - welcome-blue
+      - welcome-green
+    ports:
+      - "8080:80"
+      - "8404:8404"
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - welcome-network
+
+networks:
+  welcome-network:
+    driver: bridge
