@@ -6,13 +6,34 @@ import CardContent from "@mui/material/CardContent";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 
+const themes = {
+  blue: {
+    name: "BLUE",
+    gradient: "linear-gradient(135deg, #0A2540 0%, #1565C0 50%, #42A5F5 100%)",
+    titleGradient: "linear-gradient(90deg, #FFFFFF, #BBDEFB, #FFFFFF)",
+    buttonColor: "#42A5F5",
+    description:
+      "A modern experience powered by elegant design and beautiful blue gradients.",
+  },
+  green: {
+    name: "GREEN",
+    gradient: "linear-gradient(135deg, #052E16 0%, #16803C 50%, #66BB6A 100%)",
+    titleGradient: "linear-gradient(90deg, #FFFFFF, #C8E6C9, #FFFFFF)",
+    buttonColor: "#43A047",
+    description:
+      "A modern experience powered by elegant design and beautiful green gradients.",
+  },
+};
+
 export default function WelcomeBlue() {
+  const selectedTheme = import.meta.env.VITE_WELCOME_THEME ?? "blue";
+  const theme = themes[selectedTheme] ?? themes.blue;
+
   return (
     <Box
       sx={{
         minHeight: "100vh",
-        background:
-          "linear-gradient(135deg, #0A2540 0%, #1565C0 50%, #42A5F5 100%)",
+        background: theme.gradient,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -51,13 +72,12 @@ export default function WelcomeBlue() {
               mt: 2,
               mb: 2,
               fontSize: { xs: "2.6rem", sm: "3.75rem" },
-              background:
-                "linear-gradient(90deg, #FFFFFF, #BBDEFB, #FFFFFF)",
+              background: theme.titleGradient,
               WebkitBackgroundClip: "text",
               WebkitTextFillColor: "transparent",
             }}
           >
-            WELCOME TO BLUE
+            WELCOME TO {theme.name}
           </Typography>
 
           <Typography
@@ -67,8 +87,7 @@ export default function WelcomeBlue() {
               mb: 4,
             }}
           >
-            A modern experience powered by elegant design and beautiful blue
-            gradients.
+            {theme.description}
           </Typography>
 
           <Stack
@@ -82,7 +101,7 @@ export default function WelcomeBlue() {
               sx={{
                 borderRadius: 999,
                 px: 4,
-                background: "#42A5F5",
+                background: theme.buttonColor,
               }}
             >
               Get Started
