@@ -1,220 +1,394 @@
-# Docker Learning
+# Todo App - Docker e Kubernetes
 
-Este repositório tem fins acadêmicos e reúne exemplos práticos de criação de imagens Docker para casos de uso específicos.
+Projeto academico para estudo de containers e Kubernetes com uma aplicacao full stack simples:
 
-A proposta é que cada branch apresente um cenário diferente, com explicações passo a passo sobre como o `Dockerfile` funciona, como criar a imagem, como executar o container e como acessar ou testar o resultado.
+- `frontend`: React servido por Nginx.
+- `backend`: API Node.js com Express.
+- `banco-de-dados`: MongoDB com script inicial.
+- `k8s`: manifests para executar a aplicacao em Kubernetes/Minikube.
 
-Em vez de concentrar todos os exemplos em uma única branch, este repositório organiza os conteúdos por branches. Assim, cada caso fica mais simples de estudar, comparar e executar.
+Este conteudo foi importado do projeto `aula-uniamerica-infraestrutura-cloud` e preparado para esta branch de estudos com Kubernetes.
 
-## Objetivo Do Repositório
+As imagens sao construidas a partir dos Dockerfiles de cada componente e executadas pelo Kubernetes.
 
-O objetivo deste repositório é ajudar no aprendizado de Docker por meio de exemplos pequenos, diretos e explicados.
-
-Cada exemplo busca mostrar:
-
-- qual imagem base foi escolhida;
-- como os arquivos do projeto são copiados para dentro da imagem;
-- quais portas precisam ser expostas;
-- quais comandos são executados quando o container inicia;
-- como criar a imagem com `docker build`;
-- como executar o container com `docker run`;
-- como acessar a aplicação ou serviço publicado.
-
-## Como Usar Este Repositório
-
-Escolha a branch que mais se aproxima do caso de uso que você quer estudar.
-
-Para listar as branches disponíveis:
-
-```powershell
-git branch -a
-```
-
-Para trocar para uma branch específica:
-
-```powershell
-git checkout nome-da-branch
-```
-
-Exemplo:
-
-```powershell
-git checkout container-nginx
-```
-
-Depois de entrar na branch desejada, leia o `README.md` daquela branch e siga o passo a passo.
-
-## Branches Disponíveis
-
-### `main`
-
-Branch principal do repositório.
-
-Ela serve como ponto de entrada e explica o caráter geral do projeto. Use esta branch para entender a organização do repositório e decidir qual exemplo estudar.
-
-### `container-nginx`
-
-Exemplo de criação de uma imagem Docker usando Nginx para publicar um site estático.
-
-Esta branch é útil para estudar:
-
-- uso da imagem oficial do Nginx;
-- cópia de arquivos HTML, CSS, JavaScript e assets para dentro do container;
-- configuração de servidor web;
-- publicação de conteúdo estático;
-- mapeamento de portas entre máquina local e container.
-
-### `container-tomcat`
-
-Exemplo de criação de uma imagem Docker usando Apache Tomcat para executar uma aplicação Java empacotada em `.war`.
-
-Esta branch é útil para estudar:
-
-- uso da imagem oficial do Tomcat;
-- uso de Java dentro do container;
-- cópia de arquivo `.war` para a pasta `webapps`;
-- publicação da aplicação como `ROOT.war`;
-- execução de aplicações Java web em container.
-
-
-## Qual Branch Escolher?
-
-Use este guia rápido:
+## Estrutura
 
 ```text
-Quero publicar um site estático
--> container-nginx
-
-Quero executar uma aplicação Java .war
--> container-tomcat
-
-Quero entender a organização geral do repositório
--> main
+.
+|-- backend
+|-- banco-de-dados
+|-- frontend
+`-- k8s
 ```
 
-## Pré-Requisitos Gerais
+## Entendendo Kubernetes
 
-Para executar os exemplos, é recomendado ter instalado:
+Esta introducao adapta o material de [Aula kubernetes.md](<Aula kubernetes.md>)
+ao fluxo da aplicacao deste repositorio.
 
-- Docker Desktop;
-- Git;
-- terminal PowerShell, Prompt de Comando, Git Bash ou equivalente;
-- navegador web, quando o exemplo publicar uma aplicação acessível por HTTP.
+### Do Dockerfile ao container
 
-Docker Desktop:
+O **Dockerfile** descreve como preparar a aplicacao, suas dependencias e o
+comando de inicializacao. O build gera uma **imagem**; um **container** e uma
+instancia em execucao dessa imagem. Cada componente aqui tem seu Dockerfile:
+frontend com React/Nginx, backend com Node.js e banco com MongoDB.
+
+![Fluxo do Dockerfile ao build da imagem, registry e execucao do container](docs/images/dockerfile-imagem-container.png)
 
 ```text
-https://www.docker.com/products/docker-desktop/
+Codigo + Dockerfile -> docker build -> Imagem -> Container em um Pod
 ```
 
-Git:
+Em outros ambientes, podemos publicar imagens em um registry para que os nodes
+as baixem. Neste laboratorio, construimos diretamente no Docker do Minikube.
+O Kubernetes executa as imagens; ele nao faz o build do codigo.
+
+### Por que usar um orquestrador?
+
+Com varios containers, precisamos manter instancias funcionando, distribuir
+requisicoes e atualizar versoes. O **Kubernetes**, tambem chamado **k8s**,
+coordena esses recursos a partir do estado desejado declarado nos manifests YAML.
+Por exemplo: queremos um backend usando determinada imagem e com tres replicas.
+
+### Cluster, control plane e nodes
+
+Um **cluster** reune o control plane e os nodes que executam as cargas de
+trabalho. Ele pode usar uma ou varias maquinas. Neste tutorial, o Minikube cria
+um cluster local com um node, que tambem hospeda o control plane.
+
+![Arquitetura de um cluster Kubernetes com control plane, worker nodes e Pods](docs/images/kubernetes-arquitetura.png)
+
+O desenho da aula ilustra tres worker nodes; nosso laboratorio usa um node.
+
+| Componente | Responsabilidade |
+| --- | --- |
+| API Server | Recebe comandos do `kubectl` e disponibiliza a API do cluster. |
+| etcd | Guarda os dados e as configuracoes do cluster; nao e o banco da aplicacao. |
+| Scheduler | Escolhe um node para cada Pod ainda nao agendado, considerando recursos e restricoes. |
+| Controller Manager | Executa controladores que conciliam o estado atual com o desejado. |
+| Node | Maquina fisica ou virtual onde os Pods executam. |
+| kubelet | Agente do node que garante a execucao dos containers definidos nos Pods. |
+| Container runtime | Software que executa os containers no node. |
+
+O scheduler nao aumenta replicas com base em erros HTTP ou uso de CPU. Escala
+automatica exige um mecanismo como HPA, com metricas e configuracao apropriadas;
+este projeto ainda nao configura autoscaling.
+Referencia: [componentes do Kubernetes](https://kubernetes.io/docs/concepts/overview/components/).
+
+### Pod e Deployment
+
+O **Pod** e a menor unidade que o Kubernetes agenda. Pode conter um ou mais
+containers que compartilham rede e volumes. Aqui, frontend, backend e MongoDB
+executam em Pods separados. Um Pod nao representa toda a aplicacao.
+
+Podemos criar Pods diretamente, mas usamos **Deployments** para gerenciar suas
+replicas e atualizacoes. Um Deployment gerencia ReplicaSets, que mantem a
+quantidade desejada de Pods. Exemplo de trecho de um manifesto:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: todo-app
+spec:
+  replicas: 3
+  # O manifesto completo tambem define selector e template.
+```
+
+Se um Pod gerenciado desaparecer, o controlador cria um substituto; o scheduler
+escolhe o node e o kubelet inicia os containers. Essa recuperacao faz parte do
+**self-healing**. Para detectar aplicacoes travadas ou prontas para receber
+trafego, tambem precisamos configurar probes; os manifests atuais nao as definem.
+
+Tres replicas nao significam tres servidores: no Minikube elas podem executar
+no mesmo node. Deployments tambem permitem **rolling updates**, substituindo
+Pods gradualmente ao mudar a imagem no template. A disponibilidade depende da
+estrategia, dos recursos livres e da verificacao de prontidao da aplicacao.
+
+Referencias: [Pods](https://kubernetes.io/docs/concepts/workloads/pods/) e
+[Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/).
+
+### Service e comunicacao
+
+Pods sao substituiveis e seus IPs podem mudar. Um **Service** oferece um nome e
+um endereco estaveis, selecionando Pods por labels e encaminhando o trafego.
+Por isso, o backend usa `mongo-todo:27017`, em vez do IP de um Pod do MongoDB.
+
+![Service encaminhando o acesso do usuario para Pods do frontend em diferentes nodes](docs/images/kubernetes-services.png)
+
+| Service neste projeto | Tipo | Acesso |
+| --- | --- | --- |
+| `frontend` | NodePort | Porta `30080` do node, acessada com `minikube service`. |
+| `backend` | ClusterIP (padrao) | Interno na porta `5000`; usamos port-forward para acesso local. |
+| `mongo-todo` | ClusterIP (padrao) | Interno na porta `27017`, usado pela API. |
+
+O React executa no navegador: suas chamadas a API usam a URL publica configurada
+no build. O DNS interno dos Services nao fica disponivel no navegador.
+Referencia: [Services](https://kubernetes.io/docs/concepts/services-networking/service/).
+
+```mermaid
+flowchart LR
+    browser[Navegador] -->|minikube service| frontService[Service frontend]
+    frontService --> frontPod[Pod frontend: Nginx]
+    browser -->|React: localhost:5000 via port-forward| backService[Service backend]
+    backService --> backPod[Pod backend: Node.js]
+    backPod -->|mongo-todo:27017| mongoService[Service mongo-todo]
+    mongoService --> mongoPod[Pod MongoDB]
+    mongoPod --> volume[Volume solicitado pelo PVC mongo-data]
+```
+
+### Configuracao e persistencia
+
+| Recurso | Uso neste repositorio |
+| --- | --- |
+| Namespace | `todo-app` agrupa os recursos da aplicacao. |
+| ConfigMap | `backend-config` fornece porta, ambiente e origens CORS. |
+| Secret | `backend-secret` fornece a URI do banco; `mongo-secret` fornece as credenciais de inicializacao. |
+| PersistentVolumeClaim (PVC) | `mongo-data` solicita armazenamento persistente para `/data/db`. |
+| Kustomization | `k8s/kustomization.yaml` lista os manifests aplicados com `kubectl apply -k`. |
+
+O volume permite manter os dados quando o Pod do MongoDB e substituido; ele nao
+substitui backups. Cada componente esta configurado inicialmente com uma replica.
+
+### Como tudo funciona junto?
+
+![Fluxo de um Deployment com tres replicas, da API do cluster ate os Pods nos nodes](docs/images/kubernetes-deployment-fluxo.png)
+
+O desenho distribui as replicas em tres nodes como exemplo; essa distribuicao
+nao e garantida apenas por definir `replicas: 3`.
+
+1. Construimos as tres imagens a partir dos Dockerfiles.
+2. Aplicamos os manifests com `kubectl apply -k ./k8s` e fornecemos o Secret do backend.
+3. Os controladores criam os Pods; o scheduler escolhe o node e o kubelet os executa.
+4. Os Services permitem acessar o frontend e conectar a API ao banco.
+
+Depois que a aplicacao estiver funcionando, experimente escalar apenas o backend:
 
 ```text
-https://git-scm.com/
+kubectl scale deployment/backend --replicas=3 -n todo-app
+kubectl get pods -n todo-app -l app=backend
 ```
 
-Após instalar o Docker, verifique se ele está funcionando:
+Para manter essa quantidade apos reaplicar os manifests, altere `spec.replicas`
+em `k8s/backend.yaml`. Para voltar ao estado inicial, use `--replicas=1`.
+Escalar o MongoDB exige configurar replicacao do banco; nao basta aumentar as
+replicas do seu Deployment com o volume atual.
+
+## Instalar Minikube e kubectl
+
+O Minikube cria o cluster Kubernetes local deste projeto. Usaremos o driver
+Docker; o `kubectl` sera usado para aplicar os manifests e consultar o cluster.
+Nao e necessario habilitar o Kubernetes integrado do Docker Desktop.
+
+### Pre-requisitos
+
+- Pelo menos 2 CPUs, 2 GB de memoria livre e 20 GB de disco livre.
+- Internet para baixar ferramentas, imagens e componentes do Kubernetes.
+- Docker instalado e em execucao. Para este projeto, reserve 4 GB para o cluster.
+
+Requisitos e instalacao: [guia oficial do Minikube](https://minikube.sigs.k8s.io/docs/start/).
+
+### Windows (PowerShell, x86-64)
+
+1. Instale o [Docker Desktop para Windows](https://docs.docker.com/desktop/setup/install/windows-install/)
+   com o backend WSL 2, seguindo os requisitos do instalador. Reinicie se solicitado.
+2. Abra o Docker Desktop e aguarde o engine iniciar. Use containers Linux.
+3. Instale as ferramentas pelo `winget` no PowerShell:
 
 ```powershell
-docker --version
+winget install -e --id Kubernetes.minikube
+winget install -e --id Kubernetes.kubectl
 ```
 
-Também é possível verificar se o serviço está ativo:
+Se `winget` nao estiver disponivel, instale/atualize o App Installer da Microsoft
+Store ou use o instalador indicado no guia oficial do Minikube.
+Feche e reabra o terminal (e o VS Code, se necessario) para atualizar o `PATH`.
+Confira a instalacao:
 
 ```powershell
-docker ps
+minikube version
+kubectl version --client
+docker info --format '{{.OSType}}'
 ```
 
-## Fluxo Geral De Estudo
+O ultimo comando deve retornar `linux`. Caso retorne `windows`, altere o Docker
+Desktop para Linux containers. Execute os passos seguintes no PowerShell do Windows.
 
-Uma forma recomendada de usar este repositório é:
+Referencia: [instalacao do kubectl no Windows](https://kubernetes.io/docs/tasks/tools/install-kubectl-windows/).
 
-1. Acessar a branch `main`.
-2. Escolher o caso de uso desejado.
-3. Trocar para a branch correspondente.
-4. Ler o `README.md` da branch.
-5. Conferir o `Dockerfile`.
-6. Criar a imagem Docker.
-7. Executar o container.
-8. Testar o resultado.
-9. Comparar com outras branches para entender as diferenças.
+### Linux (Bash, x86-64)
 
-## Comandos Git Úteis
+1. Instale o Docker Engine usando o [guia da sua distribuicao](https://docs.docker.com/engine/install/).
+   Para Ubuntu, siga o [tutorial oficial](https://docs.docker.com/engine/install/ubuntu/).
+2. Configure o acesso ao Docker sem `sudo`, conforme os
+   [passos de pos-instalacao](https://docs.docker.com/engine/install/linux-postinstall/):
 
-### Ver Branch Atual
+```bash
+sudo usermod -aG docker "$USER"
+```
+
+Saia da sessao e entre novamente para aplicar o grupo. O grupo `docker` concede
+privilegios equivalentes a root; execute o Minikube como usuario comum.
+Confirme que o Docker esta acessivel:
+
+```bash
+docker info
+```
+
+3. Baixe e instale o Minikube:
+
+```bash
+curl -LO https://github.com/kubernetes/minikube/releases/latest/download/minikube-linux-amd64
+sudo install minikube-linux-amd64 /usr/local/bin/minikube
+minikube version
+```
+
+4. Baixe e instale o kubectl:
+
+```bash
+KUBECTL_VERSION=$(curl -L -s https://dl.k8s.io/release/stable.txt)
+curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+sudo install -m 0755 kubectl /usr/local/bin/kubectl
+kubectl version --client
+```
+
+Os comandos acima usam `curl` e a arquitetura `amd64` (`uname -m` retorna
+`x86_64`). Em Linux ARM64 (`aarch64`), use `minikube-linux-arm64` no download e
+na instalacao, e substitua `linux/amd64` por `linux/arm64` no download do kubectl.
+
+Referencia: [instalacao do kubectl no Linux](https://kubernetes.io/docs/tasks/tools/install-kubectl-linux/).
+
+### Criar e verificar o cluster
+
+Execute no PowerShell ou Bash, com Docker em execucao:
+
+```text
+minikube start --driver=docker --container-runtime=docker --cpus=2 --memory=4096
+minikube status
+kubectl config use-context minikube
+kubectl cluster-info
+kubectl get nodes
+```
+
+O node deve aparecer como `Ready`. A primeira inicializacao pode demorar por
+causa dos downloads. O Minikube configura o acesso ao cluster no kubeconfig.
+O runtime Docker permite construir as imagens com `minikube docker-env` abaixo.
+Referencia: [driver Docker do Minikube](https://minikube.sigs.k8s.io/docs/drivers/docker/).
+
+Se houver incompatibilidade de versao do kubectl, use o cliente do Minikube:
+
+```text
+minikube kubectl -- get nodes
+```
+
+Essa alternativa tambem funciona para os demais comandos: substitua `kubectl`
+por `minikube kubectl --`.
+
+## Executar com Minikube
+
+Com o cluster pronto, abra um terminal na raiz deste repositorio.
+Aponte o Docker para o daemon do Minikube no mesmo terminal usado para o build.
+
+Windows (PowerShell):
 
 ```powershell
-git branch --show-current
+minikube docker-env --shell powershell | Invoke-Expression
 ```
 
-### Listar Branches Locais
+Linux (Bash):
+
+```bash
+eval "$(minikube docker-env --shell bash)"
+```
+
+Repita essa configuracao ao abrir outro terminal para construir imagens. Os
+manifests usam `imagePullPolicy: Never`, portanto as imagens precisam existir
+no Docker do Minikube. Os comandos restantes funcionam nos dois sistemas.
+
+Crie as imagens usadas pelos manifests:
 
 ```powershell
-git branch
+docker build -t todo-mongo:latest ./banco-de-dados
+docker build -t todo-backend:latest ./backend
+docker build -t todo-frontend:latest ./frontend
 ```
 
-### Listar Branches Locais E Remotas
+Aplique os manifests:
 
 ```powershell
-git branch -a
+kubectl apply -k ./k8s
 ```
 
-### Trocar De Branch
+Prepare `backend/.env` com base em `backend/.env.example` e substitua os placeholders
+da URI pelas credenciais do MongoDB. O arquivo local e ignorado pelo Git e pelo build.
+Crie o Secret do backend depois de aplicar os manifests:
 
 ```powershell
-git checkout nome-da-branch
+kubectl create secret generic backend-secret --from-env-file=./backend/.env -n todo-app
 ```
 
-Exemplo:
+O Deployment le apenas `MONGO_URI` desse Secret. `PORT`, `NODE_ENV` e `CORS_ORIGINS`
+sao definidos pelo ConfigMap `backend-config` em `k8s/backend.yaml`.
+Enquanto o Secret nao existir, o container do backend aguardara sua criacao.
+As credenciais devem corresponder ao usuario existente no MongoDB.
+
+Abra o frontend:
 
 ```powershell
-git checkout container-tomcat
+minikube service frontend -n todo-app
 ```
 
-### Atualizar Informações Do Repositório Remoto
+Inclua a origem exata exibida pelo Minikube (protocolo, host e porta, sem caminho)
+em `CORS_ORIGINS` no ConfigMap. Depois reaplique os manifests e reinicie o backend:
 
 ```powershell
-git fetch
+kubectl apply -k ./k8s
+kubectl rollout restart deployment/backend -n todo-app
 ```
 
-## Comandos Docker Mais Comuns
-
-Os comandos exatos podem variar conforme a branch, mas normalmente os exemplos seguem este padrão:
+Para testar o frontend usando `localhost`, mantenha tambem um port-forward do backend:
 
 ```powershell
-docker build -t nome-da-imagem .
+kubectl port-forward service/backend 5000:5000 -n todo-app
 ```
+
+## Variaveis do backend
+
+| Variavel | Uso | Padrao |
+| --- | --- | --- |
+| `MONGO_URI` | URI completa de conexao ao MongoDB | Obrigatoria, sem credenciais fixas no codigo |
+| `PORT` | Porta HTTP da API | `5000` |
+| `CORS_ORIGINS` | Origens HTTP/HTTPS permitidas, separadas por virgula | `http://localhost:3000,http://localhost` |
+| `NODE_ENV` | Ambiente utilizado pelo Express e dependencias | `production` na imagem e no Kubernetes |
+
+`backend/.env` nao e carregado automaticamente pelo Node.js; no Kubernetes, as
+variaveis sao injetadas pelo Deployment. Para executar localmente, defina as
+variaveis na sessao do terminal antes de executar `npm start` em `backend/`.
+Ao alterar `PORT`, alinhe tambem `containerPort` e o port-forward nos manifests/comandos.
+CORS controla o acesso pelo navegador e nao substitui autenticacao.
+
+## Comandos uteis
 
 ```powershell
-docker run -d -p porta-local:porta-container --name nome-do-container nome-da-imagem
+kubectl get all -n todo-app
+kubectl logs deploy/backend -n todo-app
+kubectl logs deploy/mongo -n todo-app
+kubectl delete -k ./k8s
 ```
 
-Para listar containers em execução:
+Para encerrar o cluster sem remove-lo e voltar a inicia-lo:
 
-```powershell
-docker ps
+```text
+minikube stop
+minikube start
 ```
 
-Para parar um container:
+Para investigar uma falha na inicializacao:
 
-```powershell
-docker stop nome-do-container
+```text
+minikube logs
 ```
 
-Para remover um container parado:
-
-```powershell
-docker rm nome-do-container
-```
-
-Para ver logs:
-
-```powershell
-docker logs nome-do-container
-```
-
-## Observação
-
-Cada branch foi pensada como um exemplo independente. Por isso, arquivos, portas, nomes de imagens e comandos podem mudar de uma branch para outra.
-
-Sempre leia o `README.md` da branch escolhida antes de executar os comandos.
+No Windows com driver Docker, mantenha aberto o terminal de `minikube service`
+enquanto acessa o frontend, caso ele esteja mantendo o tunel de acesso.
