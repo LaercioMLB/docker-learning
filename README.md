@@ -21,6 +21,35 @@ As imagens sao construidas a partir dos Dockerfiles de cada componente e executa
 `-- k8s
 ```
 
+Os manifests Kubernetes sao separados por tipo de recurso:
+
+```text
+k8s/
+|-- deployments/
+|   |-- backend.yaml
+|   |-- frontend.yaml
+|   `-- mongo.yaml
+|-- services/
+|   |-- backend.yaml
+|   |-- frontend.yaml
+|   `-- mongo.yaml
+|-- configmaps/
+|   `-- backend.yaml
+|-- secrets/
+|   `-- mongo.yaml
+|-- storage/
+|   `-- mongo.yaml
+|-- namespace.yaml
+`-- kustomization.yaml
+```
+
+`deployments/` define as imagens e replicas; `services/` define o acesso aos
+Pods. `configmaps/` guarda configuracoes comuns, `secrets/` os manifests de
+credenciais e `storage/` as solicitacoes de armazenamento persistente.
+O Secret `backend-secret` continua sendo criado a partir do arquivo local
+`backend/.env`, conforme o tutorial abaixo. O Kustomize reune todos os manifests,
+mantendo o comando `kubectl apply -k ./k8s`.
+
 ## Entendendo Kubernetes
 
 Esta introducao adapta o material de [Aula kubernetes.md](<Aula kubernetes.md>)
@@ -171,7 +200,7 @@ kubectl get pods -n todo-app -l app=backend
 ```
 
 Para manter essa quantidade apos reaplicar os manifests, altere `spec.replicas`
-em `k8s/backend.yaml`. Para voltar ao estado inicial, use `--replicas=1`.
+em `k8s/deployments/backend.yaml`. Para voltar ao estado inicial, use `--replicas=1`.
 Escalar o MongoDB exige configurar replicacao do banco; nao basta aumentar as
 replicas do seu Deployment com o volume atual.
 
@@ -329,7 +358,7 @@ kubectl create secret generic backend-secret --from-env-file=./backend/.env -n t
 ```
 
 O Deployment le apenas `MONGO_URI` desse Secret. `PORT`, `NODE_ENV` e `CORS_ORIGINS`
-sao definidos pelo ConfigMap `backend-config` em `k8s/backend.yaml`.
+sao definidos pelo ConfigMap `backend-config` em `k8s/configmaps/backend.yaml`.
 Enquanto o Secret nao existir, o container do backend aguardara sua criacao.
 As credenciais devem corresponder ao usuario existente no MongoDB.
 
