@@ -51,10 +51,6 @@ O Secret `backend-secret` continua sendo criado a partir do arquivo local
 mantendo o comando `kubectl apply -k ./k8s`.
 
 ## Entendendo Kubernetes
-
-Esta introducao adapta o material de [Aula kubernetes.md](<Aula kubernetes.md>)
-ao fluxo da aplicacao deste repositorio.
-
 ### Do Dockerfile ao container
 
 O **Dockerfile** descreve como preparar a aplicacao, suas dependencias e o
