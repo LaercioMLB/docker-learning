@@ -6,4 +6,4 @@ metadata:
 data:
   PORT: "5000"
   NODE_ENV: production
-  CORS_ORIGINS: http://localhost,http://localhost:30080,http://127.0.0.1:30080
+  CORS_ORIGINS: http://localhost,http://localhost:30080,http://127.0.0.1:30080,http://192.168.49.2:30080
