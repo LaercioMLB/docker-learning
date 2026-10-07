@@ -61,11 +61,12 @@ frontend com React/Nginx, backend com Node.js e banco com MongoDB.
 ![Fluxo do Dockerfile ao build da imagem, registry e execucao do container](docs/images/dockerfile-imagem-container.png)
 
 ```text
-Codigo + Dockerfile -> docker build -> Imagem -> Container em um Pod
+Codigo + Dockerfile -> minikube image build -> Imagem -> Container em um Pod
 ```
 
 Em outros ambientes, podemos publicar imagens em um registry para que os nodes
-as baixem. Neste laboratorio, construimos diretamente no Docker do Minikube.
+as baixem. Neste laboratorio, construimos diretamente no Minikube com
+`minikube image build`.
 O Kubernetes executa as imagens; ele nao faz o build do codigo.
 
 ### Por que usar um orquestrador?
@@ -298,7 +299,7 @@ kubectl get nodes
 
 O node deve aparecer como `Ready`. A primeira inicializacao pode demorar por
 causa dos downloads. O Minikube configura o acesso ao cluster no kubeconfig.
-O runtime Docker permite construir as imagens com `minikube docker-env` abaixo.
+Construiremos as imagens com `minikube image build`, conforme os passos abaixo.
 Referencia: [driver Docker do Minikube](https://minikube.sigs.k8s.io/docs/drivers/docker/).
 
 Se houver incompatibilidade de versao do kubectl, use o cliente do Minikube:
@@ -312,32 +313,58 @@ por `minikube kubectl --`.
 
 ## Executar com Minikube
 
-Com o cluster pronto, abra um terminal na raiz deste repositorio.
-Aponte o Docker para o daemon do Minikube no mesmo terminal usado para o build.
+Com o cluster pronto, abra um terminal na raiz deste repositorio. Execute
+`minikube` e `kubectl` como seu usuario comum, sem `sudo`: o acesso ao cluster
+foi configurado para esse usuario.
 
-Windows (PowerShell):
-
-```powershell
-minikube docker-env --shell powershell | Invoke-Expression
-```
-
-Linux (Bash):
-
-```bash
-eval "$(minikube docker-env --shell bash)"
-```
-
-Repita essa configuracao ao abrir outro terminal para construir imagens. Os
-manifests usam `imagePullPolicy: Never`, portanto as imagens precisam existir
-no Docker do Minikube. Os comandos restantes funcionam nos dois sistemas.
+Os manifests usam `imagePullPolicy: Never`, portanto as imagens precisam existir
+no runtime do Minikube. `minikube image build` constroi as imagens nesse ambiente,
+sem precisar configurar `minikube docker-env`. Um build apenas no Docker da sua
+maquina pode deixar as imagens fora do alcance do cluster, causando
+`ErrImageNeverPull`. Os comandos abaixo funcionam no PowerShell e no Bash.
 
 Crie as imagens usadas pelos manifests:
 
 ```powershell
-docker build -t todo-mongo:latest ./banco-de-dados
-docker build -t todo-backend:latest ./backend
-docker build -t todo-frontend:latest ./frontend
+minikube image build -t todo-mongo:latest ./banco-de-dados
+minikube image build -t todo-backend:latest ./backend
+minikube image build -t todo-frontend:latest ./frontend
 ```
+
+### Preparar o backend para o laboratorio local
+
+Crie `backend/.env` com base em `backend/.env.example`. Para o laboratorio local
+com Minikube e as credenciais atuais de `k8s/secrets/mongo.yaml`, use:
+
+```dotenv
+MONGO_URI=mongodb://root:rootpassword@mongo-todo:27017/todo-app?authSource=admin
+PORT=5000
+NODE_ENV=production
+CORS_ORIGINS=http://localhost:3000,http://localhost,http://localhost:30080,http://127.0.0.1:30080
+```
+
+A URI informa ao backend como chegar ao banco:
+
+- `root:rootpassword` corresponde ao usuario e senha definidos no Secret do MongoDB.
+  Sao credenciais de exemplo para este laboratorio.
+- `mongo-todo` e o nome do Service que permite encontrar o MongoDB dentro do
+  namespace `todo-app`. `localhost` dentro do Pod do backend apontaria para o
+  proprio Pod, e nao para o banco.
+- `27017` e a porta do MongoDB; `todo-app` e o banco usado pela aplicacao.
+- `authSource=admin` indica o banco onde o usuario root foi criado para autenticacao.
+
+Este exemplo considera que a API executa dentro do Minikube, mesmo que o cluster
+esteja na sua maquina. Se executar a API diretamente no computador, o nome
+`mongo-todo` nao estara disponivel: sera preciso expor o MongoDB, por exemplo com
+`kubectl port-forward service/mongo-todo 27017:27017 -n todo-app`, e trocar o host
+da URI por `localhost`.
+
+O arquivo `.env` e ignorado pelo Git e pelo build. As configuracoes sao fornecidas
+ao container quando ele inicia, permitindo mudar o ambiente sem reconstruir a
+imagem. Neste tutorial, o arquivo serve de entrada para criar o Secret do backend;
+o Node.js nao o carrega automaticamente.
+
+### Aplicar os recursos e fornecer o Secret
 
 Aplique os manifests:
 
@@ -345,8 +372,6 @@ Aplique os manifests:
 kubectl apply -k ./k8s
 ```
 
-Prepare `backend/.env` com base em `backend/.env.example` e substitua os placeholders
-da URI pelas credenciais do MongoDB. O arquivo local e ignorado pelo Git e pelo build.
 Crie o Secret do backend depois de aplicar os manifests:
 
 ```powershell
@@ -358,6 +383,20 @@ sao definidos pelo ConfigMap `backend-config` em `k8s/configmaps/backend.yaml`.
 Enquanto o Secret nao existir, o container do backend aguardara sua criacao.
 As credenciais devem corresponder ao usuario existente no MongoDB.
 
+Se alterar `backend/.env` depois que o Secret ja existir, atualize-o e reinicie
+o backend para que os novos Pods recebam a configuracao. O comando de atualizacao
+abaixo deve ser executado em uma unica linha, tanto no Bash quanto no PowerShell:
+
+```text
+kubectl create secret generic backend-secret --from-env-file=./backend/.env -n todo-app --dry-run=client -o yaml | kubectl apply -f -
+kubectl rollout restart deployment/backend -n todo-app
+```
+
+Na primeira criacao do Secret, se o backend ainda estiver aguardando esse recurso,
+ele iniciara automaticamente. Nao e necessario reinicia-lo nesse caso.
+
+### Acessar o frontend e configurar CORS
+
 Abra o frontend:
 
 ```powershell
@@ -365,18 +404,80 @@ minikube service frontend -n todo-app
 ```
 
 Inclua a origem exata exibida pelo Minikube (protocolo, host e porta, sem caminho)
-em `CORS_ORIGINS` no ConfigMap. Depois reaplique os manifests e reinicie o backend:
+em `CORS_ORIGINS` no ConfigMap. Por exemplo, se a URL for
+`http://192.168.49.2:30080`, configure em `k8s/configmaps/backend.yaml`:
+
+```yaml
+CORS_ORIGINS: "http://localhost,http://localhost:30080,http://127.0.0.1:30080,http://192.168.49.2:30080"
+```
+
+Substitua o endereco de exemplo pelo exibido no seu ambiente, sem barra final.
+CORS permite que o navegador leia respostas da API quando a pagina e a API
+possuem origens diferentes. A origem permitida e a da pagina do frontend, e nao
+a URL do MongoDB ou a URL de destino da API. No Kubernetes deste projeto,
+alterar `CORS_ORIGINS` apenas no `.env` nao tem efeito: o Deployment usa o valor
+do ConfigMap.
+
+Depois reaplique os manifests e reinicie o backend:
 
 ```powershell
 kubectl apply -k ./k8s
 kubectl rollout restart deployment/backend -n todo-app
+kubectl rollout status deployment/backend -n todo-app
 ```
 
-Para testar o frontend usando `localhost`, mantenha tambem um port-forward do backend:
+Em outro terminal, exponha a API localmente e **mantenha este comando rodando
+durante todo o uso da aplicacao**:
 
 ```powershell
 kubectl port-forward service/backend 5000:5000 -n todo-app
 ```
+
+O frontend foi construido com a URL de API padrao `http://localhost:5000`.
+Mesmo que a pagina esteja aberta em `http://192.168.49.2:30080`, o React executa
+no navegador e chama a API em `localhost:5000`. O port-forward encaminha essas
+chamadas para o Service do backend dentro do Kubernetes:
+
+```text
+Navegador -> localhost:5000 -> kubectl port-forward -> Service backend -> Pod backend
+```
+
+O navegador deve estar na mesma maquina onde o port-forward esta rodando.
+Fechar esse terminal ou interromper o comando com Ctrl+C encerra o acesso local
+a API, mesmo que os Pods continuem `Running`. Se o port-forward encerrar ao
+reiniciar o backend ou o cluster, execute-o novamente depois que o backend
+estiver pronto. Nao e necessario reconstruir as imagens para abrir esse acesso.
+
+### Troubleshooting: frontend abre, mas nao carrega as tarefas
+
+Se a chamada a `http://localhost:5000/todos` falhar, confira primeiro se o
+port-forward acima continua rodando. Abra `http://localhost:5000/todos` no
+navegador: a API deve responder com um JSON contendo as tarefas.
+
+Para verificar tambem o CORS, execute em um terceiro terminal (Bash):
+
+```bash
+curl -i -H 'Origin: http://192.168.49.2:30080' http://localhost:5000/todos
+```
+
+No PowerShell do Windows, use `curl.exe` no lugar de `curl`. Substitua a origem
+pela URL real do frontend, incluindo protocolo e porta, sem caminho ou barra
+final. A resposta esperada tem status `200`, o JSON das tarefas e o cabecalho:
+
+```text
+Access-Control-Allow-Origin: http://192.168.49.2:30080
+```
+
+- Se houver erro de conexao, confira o port-forward e os Pods com
+  `kubectl get pods -n todo-app`.
+- Se a API responder, mas o cabecalho CORS estiver ausente ou diferente da origem
+  enviada, confira `CORS_ORIGINS` em `k8s/configmaps/backend.yaml`. Reaplique os
+  manifests, reinicie o backend e aguarde o rollout conforme os comandos acima;
+  depois reabra o port-forward se ele tiver encerrado.
+- Se o teste responder corretamente e o navegador continuar falhando, consulte
+  a aba Console das ferramentas de desenvolvedor para identificar a mensagem
+  exata. Uma requisicao sem cabecalhos de resposta na aba Network, por si so,
+  nao confirma um problema de CORS.
 
 ## Variaveis do backend
 
